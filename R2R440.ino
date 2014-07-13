@@ -1,13 +1,18 @@
-int LED = 13;
-
-
 #include <avr/pgmspace.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <math.h>
 
+#include <stdint.h>
+#include <inttypes.h>
 
+#define PHASE_BITS 32
+#define SIN_BITS 8
+#define R2R_BITS 8
 
+int LED = 13;
+
+#define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
 uint8_t  SIN8[256] PROGMEM = {
   0x80, 0x83, 0x86, 0x89, 0x8C, 0x90, 0x93, 0x96,
@@ -45,61 +50,165 @@ uint8_t  SIN8[256] PROGMEM = {
 };
 
 
-#define PHASE_BITS 32
-#define SIN_BITS 8
-#define R2R_BITS 8
+uint32_t freq_table[] PROGMEM = {
+  561781,
+  595110,
+  630501,
+  668296,
+  707810,
+  750073,
+  794397,
+  841813,
+  891978,
+  944892,
+  1001242,
+  1060685,
+  1123563,
+  1190564,
+  1261345,
+  1336250,
+  1415621,
+  1499802,
+  1589137,
+  1683627,
+  1783614,
+  1889785,
+  2002141,
+  2121370,
+  2247470,
+  2381129,
+  2522691,
+  2672500,
+  2831586,
+  2999948,
+  3178275,
+  3367254,
+  3567571,
+  3779571,
+  4004283,
+  4242396,
+  4494597,
+  4761916,
+  5045040,
+  5345000,
+  5662828,
+  5999553,
+  6356551,
+  6734508,
+  7134799,
+  7559142,
+  8008567,
+  8484793,
+  8989538,
+  9523832,
+  10090080,
+  10690345,
+  11326000,
+  11999451,
+  12712759,
+  13469017,
+  14269599,
+  15118284,
+  16017135,
+  16969587,
+  17978733,
+  19048008,
+  20180505,
+  21380347,
+  22651657,
+  23998902,
+  25425862,
+  26937691,
+  28539542,
+  30236569,
+  32034614,
+  33939518,
+  35957466,
+  38095672,
+  40361010,
+  42761037,
+  45303658,
+  47997462,
+  50851725,
+  53875382,
+  57079084,
+  60473139,
+  64069229,
+  67878693,
+  71914932,
+  76191345,
+  80722020,
+  85522075,
+  90607317,
+  95995267,
+  101703451,
+  107750765,
+  114158169,
+  120946279,
+  128138115,
+  135757731,
+  143830208,
+  152382690,
+  161443697,
+  171043808,
+  181214634,
+  191990192,
+  203406558,
+  215501873,
+  228316338,
+  241892558,
+  256276231,
+  271515119
+};
 
 
 const double refclk = 125000;
 volatile uint32_t tuning_word = 0;
 volatile uint32_t phase = 0;
+volatile uint8_t play_timer = 0;
+
 void set_freq(double freq) {
-  tuning_word = pow(2,33) * freq / refclk;
+  tuning_word = pow(2,32)*freq / refclk;
 }
 
+void setup() {
+  pinMode(LED, INPUT);
+  pinMode(LED, HIGH);
+  
+  // all bits output
+  DDRD = 0xff;
+  tuning_word = pgm_read_dword_near(freq_table + 50);
+
+  // clock is 8 mhz, want a 125000 hz timer (/64 prescale)
+  cli();
+  TCNT0 = 0;
+  TCCR0A = (1 << WGM01); // CTC, no pin toggles
+  TCCR0B = (1 << CS01) | (1 << CS00); // /64 prescale (125000hz)
+  OCR0A = 1; // interrupt every timer step, 125000hz hz compare match
+  TIMSK0 |= (1 << OCIE0A);
+  sei();
+}
 
 ISR(TIMER0_COMPA_vect) {
   uint8_t value = pgm_read_byte_near(SIN8 + (phase >> (PHASE_BITS - SIN_BITS)));
   PORTD = value >> (8 - R2R_BITS);
   phase += tuning_word;
+  ++play_timer;
 }
 
+uint8_t wait = 0;
+int note = 0;
 
-
-void setup() {
-  pinMode(LED, OUTPUT);
-  
-  // all bits output
-  DDRD = 0xff;
-  set_freq(440);
-
-  // clock is 8 mhz, want a 62500 clock 31250 hz timer (/256 prescale)
-  cli();
-  TCNT0 = 0;
-  TCCR0A = (1 << WGM01); // CTC, no pin toggles
-  TCCR0B = (1 << CS01) | (1 << CS00); // /64 prescale (125000hz)
-  OCR0A = 1; // interrupt every 2 timer steps, 62500 hz compare match
-  TIMSK0 |= (1 << OCIE0A);
-  sei();
-}
-
-uint8_t wait(uint8_t a) {
-  return a + 1;
-}
-
-//uint8_t state = 0;
 void loop() {
-  /*
-  double freq = 440;
-  set_freq(freq);
-  */
-  uint16_t state = 0;
-  while(++state != 0) { wait(state); };
-  digitalWrite(LED, HIGH);
+  while(play_timer != 0) { }
+  wait++;
   
-  state = 0;
-  while(++state != 1) { wait(state); };  
-  digitalWrite(LED, LOW);
-
+  if(wait == 8) {
+    tuning_word = pgm_read_dword_near(freq_table + note);
+    note = (note + 1) % ARRAY_SIZE(freq_table);
+    wait = 0;
+  }
+  
+  while(play_timer == 0) {}
 }
 
