@@ -125,8 +125,8 @@ void loop() {
   
   arp_wait++;
   if(arp_wait == 32) {
-    uint8_t arp_note = pgm_read_dword_near(freq_table + ((note + arps[arp_state]) % ARRAY_SIZE(freq_table)));
-    tuning_word = pgm_read_dword_near(freq_table + arp_note);
+    tuning_word = pgm_read_dword_near(freq_table + ((note + arps[arp_state]) % ARRAY_SIZE(freq_table)));
+    //tuning_word = pgm_read_dword_near(freq_table + tuning_word);
     if(++arp_state == ARRAY_SIZE(arps)) {
       arp_state = 0;
     }
