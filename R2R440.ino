@@ -203,7 +203,7 @@ void loop() {
   while(play_timer != 0) { }
   wait++;
   
-  if(wait == 8) {
+  if(wait == map(analogRead(A0), 0, 1023, 0, 255)) {
     tuning_word = pgm_read_dword_near(freq_table + note);
     note = (note + 1) % ARRAY_SIZE(freq_table);
     wait = 0;
